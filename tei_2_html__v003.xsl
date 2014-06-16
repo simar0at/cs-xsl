@@ -151,43 +151,160 @@
         <p><xsl:apply-templates/></p>
     </xsl:template>
 
-    <xsl:template match="*" mode="egXML">
-        <span>
-            <xsl:if test="preceding-sibling::node()[1]/self::*">
-                <xsl:text>
- </xsl:text>
+    <xsl:variable name="indent">
+        <span class="indent">
+            <xsl:text>&#160;</xsl:text>
+        </span>
+    </xsl:variable>
+    <xsl:variable name="newline">
+        <span class="newline">
+            <xsl:text>&#10;</xsl:text>
+        </span>
+    </xsl:variable>
+    
+    <xsl:template name="indent">
+        <xsl:param name="current" select="1"/>
+        <xsl:param name="total"/>
+        <xsl:choose>
+            <xsl:when test="$current = $total">
+                <xsl:copy-of select="$indent"/>
+            </xsl:when>
+            <xsl:when test="$current &gt; $total"/>
+            <xsl:otherwise>
+                <xsl:copy-of select="$indent"/>
+                <xsl:call-template name="indent">
+                    <xsl:with-param name="total" select="$total"/>
+                    <xsl:with-param name="current" select="$current+1"/>
+                </xsl:call-template>
+            </xsl:otherwise>
+        </xsl:choose>
+    </xsl:template>
+    
+    <xsl:template name="split">
+        <xsl:param name="string"/>
+        <xsl:param name="delimiter" select="'&#xA;'"/>
+        <xsl:param name="after"/>
+        <xsl:param name="before"/>
+        <xsl:choose>
+            <xsl:when test="not(contains($string,$delimiter))">
+                <xsl:value-of select="$string"/>
+            </xsl:when>
+            <xsl:otherwise>
+                <xsl:if test="normalize-space(substring-before($string,$delimiter))!=''">
+                    <xsl:copy-of select="$before"/>
+                </xsl:if>
+                <xsl:value-of select="normalize-space(substring-before($string,$delimiter))"/>
+                <xsl:call-template name="split">
+                    <xsl:with-param name="after" select="$after"/>
+                    <xsl:with-param name="before" select="$before"/>
+                    <xsl:with-param name="delimiter" select="$delimiter"/>
+                    <xsl:with-param name="string" select="substring-after($string,$delimiter)"/>
+                </xsl:call-template>
+                <xsl:copy-of select="$after"/>
+            </xsl:otherwise>
+        </xsl:choose>
+    </xsl:template>
+    
+    <xsl:template match="text()" mode="egXML">
+        <xsl:param name="depth" select="1"/>
+        <xsl:variable name="indentVal">
+            <xsl:text>&#xA;</xsl:text>
+            <xsl:if test="$depth &gt; 1">
+                <xsl:call-template name="indent">
+                    <xsl:with-param name="total" select="$depth"/>
+                </xsl:call-template>
             </xsl:if>
-            <span class="spRed"><xsl:value-of select="concat('&lt;',local-name())"/></span>
-            <xsl:apply-templates select="@*" mode="egXML"/>
+        </xsl:variable>
+        <xsl:if test="parent::egXML:egXML and not(following-sibling::node()) and normalize-space(.) = '...'">
+            <xsl:text>&#xA;</xsl:text>
+            <xsl:if test="$depth &gt; 1">
+                <xsl:call-template name="indent">
+                    <xsl:with-param name="total" select="$depth+-1"/>
+                </xsl:call-template>
+            </xsl:if>
+        </xsl:if>
+        <xsl:call-template name="split">
+            <xsl:with-param name="delimiter" select="'&#xA;'"/>
+            <xsl:with-param name="string" select="."/>
+            <xsl:with-param name="after"/>
+            <xsl:with-param name="before" select="$indentVal"/>
+        </xsl:call-template>
+        <xsl:if test="following-sibling::*">
+            <xsl:text>&#xA;</xsl:text>
+            <xsl:if test="$depth &gt; 1">
+                <xsl:call-template name="indent">
+                    <xsl:with-param name="total" select="$depth+-1"/>
+                </xsl:call-template>
+            </xsl:if>
+        </xsl:if>
+    </xsl:template>
+    
+    <xsl:template match="*" mode="egXML">
+        <xsl:param name="depth" select="1"/>
+        <xsl:if test="preceding-sibling::node()[1]/self::*">
+            <xsl:copy-of select="$newline"/>
+            <xsl:call-template name="indent">
+                <xsl:with-param name="total" select="$depth+-1"/>
+            </xsl:call-template>
+        </xsl:if>
+        <span class="element">
+            <span class="spRed">
+                <xsl:value-of select="concat('&lt;',local-name())"/>
+            </span>
+            <xsl:apply-templates mode="egXML" select="@*"/>
             <xsl:choose>
                 <xsl:when test="node()">
-                    <span class="spRed"><xsl:text>&gt;</xsl:text></span>
-                    <xsl:apply-templates mode="egXML"/>
-                    <span class="spRed"><xsl:text>&lt;/</xsl:text><xsl:value-of select="local-name()"/><xsl:text>&gt;</xsl:text></span>
+                    <span class="spRed">
+                        <xsl:text>&gt;</xsl:text>
+                    </span>
+                    <xsl:if test="node()[1]/self::*">
+                        <xsl:copy-of select="$newline"/>
+                        <xsl:call-template name="indent">
+                            <xsl:with-param name="total" select="$depth"/>
+                        </xsl:call-template>
+                    </xsl:if>
+                    <xsl:apply-templates mode="egXML">
+                        <xsl:with-param name="depth" select="$depth+1"/>
+                    </xsl:apply-templates>
+                    <xsl:if test="* or contains(node()[last()]/self::text(),'&#xA;')">
+                        <xsl:copy-of select="$newline"/>
+                        <xsl:call-template name="indent">
+                            <xsl:with-param name="total" select="$depth+-1"/>
+                        </xsl:call-template>
+                    </xsl:if>
+                    <span class="spRed">
+                        <xsl:text>&lt;/</xsl:text>
+                        <xsl:value-of select="local-name()"/>
+                        <xsl:text>&gt;</xsl:text>
+                    </span>
                 </xsl:when>
                 <xsl:otherwise>
-                    <span class="spRed"><xsl:text>/&gt;</xsl:text></span>
+                    <span class="spRed">
+                        <xsl:text>/&gt;</xsl:text>
+                    </span>
                 </xsl:otherwise>
             </xsl:choose>
         </span>
     </xsl:template>
-
+    
     <xsl:template match="@*" mode="egXML">
         <span>
             <xsl:text> </xsl:text>
-            <span class="spAttrName"><xsl:value-of select="local-name()"/></span><span class="spEquals">=</span><span class="spQuotes">"</span><span class="spValue"><xsl:value-of select="."/></span><span class="spQuotes">"</span>
+            <span class="spAttrName">
+                <xsl:value-of select="local-name()"/>
+            </span>
+            <span class="spEquals">=</span>
+            <span class="spQuotes">"</span>
+            <span class="spValue">
+                <xsl:value-of select="."/>
+            </span>
+            <span class="spQuotes">"</span>
         </span>
     </xsl:template>
-
+    
     <xsl:template match="egXML:egXML">
-        <pre class="preBox"><xsl:apply-templates select="node()" mode="egXML"/></pre>
+        <pre class="preBox"><xsl:apply-templates mode="egXML" select="node()"/></pre>
     </xsl:template>
-
-    <xsl:template match="egXML:egXML">
-        <pre class="preBox"><xsl:apply-templates select="node()" mode="egXML"/></pre>
-    </xsl:template>
-
-
 
     <xsl:template match="@*">
         <xsl:apply-templates/>
